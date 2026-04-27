@@ -2,7 +2,7 @@
 
 **For:** Code (the implementation agent)
 **From:** Skippy (architecture and infrastructure)
-**Last updated:** 2026-04-27
+**Last updated:** 2026-04-27 (revised: unified platform decision)
 **Target ship date:** 2026-05-27 (30 days; superintendent pitch the same week)
 
 ---
@@ -10,20 +10,43 @@
 ## 1. Mission and constraints
 
 ### 1.1 What we are building
-A flyer distribution platform for Davis School District (DSD) that lives at `daviskids.org/flyers`, replacing both **Peachjar** (parent-facing) and **DSDads** (employee-facing). The platform must be ADA-compliant by default — every flyer that ships through it should pass WCAG 2.1 AA.
+
+**One platform. Two doors.**
+
+A unified flyer distribution platform for Davis School District (DSD) that lives at `daviskids.org/flyers`. It replaces **Peachjar** (currently used for parent-facing flyers) AND **DSDads** (currently used for employee announcements) with a single system.
+
+There is no separate employee product. There is no separate parent product. There is just **Flyers**. Each flyer carries an `audience` flag (`parents` | `employees` | `both`), and the public site has two entry points — one for parents, one for employees — that filter the same underlying content.
+
+The platform must be ADA-compliant by default — every flyer that ships through it should pass WCAG 2.1 AA.
 
 ### 1.2 Why we are building it
-Federal Title II of the ADA (April 2024 rule) requires WCAG 2.1 AA on all public-facing digital content from public entities. Peachjar pushes image PDFs whose text is not duplicated as accessible text. Every Peachjar flyer is a potential OCR (Office for Civil Rights) complaint. The district already has a relationship with the OCR office and cannot afford continued exposure. **Compliance is the wedge. Cost savings are the bonus.**
 
-### 1.3 Hard constraints
+Federal Title II of the ADA (April 2024 rule) requires WCAG 2.1 AA on all public-facing digital content from public entities. Peachjar pushes image PDFs whose text is not duplicated as accessible text. Every Peachjar flyer is a potential OCR (Office for Civil Rights) complaint. The district already has a relationship with the OCR office and cannot afford continued exposure.
+
+DSDads has the same problem internally — and arguably worse, because internal-facing tools historically receive less compliance scrutiny but the legal exposure is identical.
+
+**Compliance is the wedge. Cost savings and platform consolidation are the bonuses.**
+
+### 1.3 The contact graph (this changes the migration story)
+
+DSD owns the parent contact list. We are not begging Peachjar for a data export. The district will hand us:
+- Parent email addresses (associated with student-school relationships when available)
+- Employee email addresses (`@dsdmail.net` accounts)
+
+We seed the `subscriptions` table on day one of pilot from this district-owned data with `source = 'district_import'` and a default frequency. Imported subscribers are treated as opted-in (this is allowed for district-internal communications under CAN-SPAM since the district has a pre-existing relationship), but every digest still includes one-click unsubscribe and a "manage your preferences" link.
+
+SMS is the opposite story. We are NOT importing SMS contacts from any vendor. Phone numbers are collected only via opt-in on our own subscribe form. The SMS channel grows organically as parents and employees opt in. Twilio rails on the Wicko A2P 10DLC campaign (registration in progress).
+
+### 1.4 Hard constraints
 - **30-day timeline.** v1 must be live with at least one pilot school posting real flyers before the superintendent meeting.
 - **Lives inside daviskids.org.** Same brand. Same domain. Users never feel they have left the district site.
 - **WCAG 2.1 AA from day one** on the platform UI itself — not retrofitted.
 - **Sixth-grade reading level target** for all submitted flyer content. The district has formally adopted this as a communication standard. The platform must measure and surface this; it is not a hard block on submission, but it is surfaced on every submit and flagged for moderation.
 - **Open-source first.** Free alternatives over paid services wherever the quality is acceptable.
 - **No SharePoint dependencies.** The accessibility training that triggered this project specifically warned that SharePoint files break when employees leave. Do not store anything important in SharePoint.
+- **Single platform from v1.** No phased rollout where employee features come later. Parent-facing and employee-facing are equal first-class citizens in v1.
 
-### 1.4 Soft constraints (preferences)
+### 1.5 Soft constraints (preferences)
 - TypeScript over JavaScript
 - Hono for routing (already in package.json)
 - Server-rendered HTML (Hono JSX) over client-side React for v1 — accessibility is much easier to guarantee with server rendering, and we want every page to work without JavaScript
@@ -144,23 +167,26 @@ draft -> pending_review -> approved -> published -> expired
 
 All routes are prefixed with `/flyers`. The Worker route catches `daviskids.org/flyers/*`.
 
-### 4.1 Public (no auth)
+### 4.1 Public (no auth required for parents; SSO required for employee view)
+
+The two-door pattern: `/flyers` (or `/flyers/parents`) is the parent-facing front door; `/flyers/employees` is the employee-facing front door. Same backend, same flyer pool, just filtered by audience.
 
 | Method | Path | Purpose |
 |---|---|---|
-| GET | `/flyers` | Index page — recent published flyers across audiences user is allowed to see (defaults to parents) |
-| GET | `/flyers/parents` | Parent-facing flyer browse |
-| GET | `/flyers/employees` | Employee-facing browse (requires employee SSO) |
-| GET | `/flyers/school/<school-id>` | All flyers for a specific school |
-| GET | `/flyers/category/<category>` | All flyers in a category |
-| GET | `/flyers/<flyer-slug>` | Single flyer detail page |
+| GET | `/flyers` | Default landing — same as `/flyers/parents`. Decision rationale: most traffic will be parents, so parent view is the default. |
+| GET | `/flyers/parents` | Parent-facing flyer browse. Shows flyers where `audience IN ('parents', 'both')` and `status = 'published'`. No auth required. |
+| GET | `/flyers/employees` | Employee-facing browse. Shows flyers where `audience IN ('employees', 'both')` and `status = 'published'`. **Requires employee SSO** (verifies `is_employee = 1`). |
+| GET | `/flyers/school/<school-id>` | All published flyers for a school, filtered by current audience context |
+| GET | `/flyers/category/<category>` | All published flyers in a category, filtered by audience |
+| GET | `/flyers/<flyer-slug>` | Single flyer detail page. If audience is `employees` only, requires employee SSO; otherwise public. |
 | GET | `/flyers/asset/<r2-key>` | Public image/PDF fetch from R2 |
 | GET | `/flyers/api/health` | Health check (already implemented in scaffold) |
-| GET | `/flyers/api/search?q=<query>` | Semantic search (Vectorize) + keyword fallback |
-| GET | `/flyers/feeds/<school-id>.rss` | RSS feed per school |
+| GET | `/flyers/api/search?q=<query>&audience=<aud>` | Semantic search (Vectorize) + keyword fallback, audience-filtered |
+| GET | `/flyers/feeds/<school-id>.rss` | RSS feed per school (parents-audience by default; ?audience=employees requires auth) |
 | GET | `/flyers/feeds/<school-id>.ics` | iCal feed of events from school's flyers |
-| POST | `/flyers/api/subscribe` | Subscribe to digest (email or SMS) |
-| GET | `/flyers/unsubscribe/<token>` | Unsubscribe page |
+| POST | `/flyers/api/subscribe` | Subscribe to digest (email or SMS); audience captured at signup |
+| GET | `/flyers/unsubscribe/<token>` | Unsubscribe page (token-based, no login) |
+| GET | `/flyers/manage/<token>` | Manage subscription preferences (token-based, no login) |
 | GET | `/flyers/auth/login` | Login page (provider chooser) |
 | GET | `/flyers/auth/<provider>` | Initiate OAuth (microsoft, google, apple) |
 | GET | `/flyers/auth/<provider>/callback` | OAuth callback |
@@ -208,6 +234,10 @@ All routes are prefixed with `/flyers`. The Worker route catches `daviskids.org/
 | GET | `/flyers/admin/district/analytics` | District-wide analytics |
 | GET | `/flyers/admin/district/audit-log` | Admin action audit log |
 | GET | `/flyers/admin/district/cost-savings` | "vs Peachjar" running counter (for the pitch) |
+| GET | `/flyers/admin/district/imports` | List parent contact imports |
+| POST | `/flyers/admin/district/imports` | Upload a CSV of parent emails to seed subscriptions |
+| GET | `/flyers/admin/district/imports/<id>` | Detail view of a specific import (rows imported, skipped, failed) |
+| POST | `/flyers/admin/district/imports/<id>/rollback` | Roll back an import (deactivate all subscriptions created by it) |
 
 ### 4.5 Response conventions
 
@@ -415,13 +445,45 @@ The "submit as text-only instead" option is critical — sometimes the right ans
 
 ### 8.2 Subscription model
 
-- Subscriptions are stored in `subscriptions` table
-- Anonymous email subscriptions are allowed (no account needed) — this matches Peachjar UX where parents subscribe without an account
-- Verification email required before activation (double opt-in for CAN-SPAM)
-- Each subscription has filter criteria: `school_ids` (or null for all), `categories` (or null for all), `audience`
-- `digest_frequency`: `instant` (per flyer), `daily`, `weekly`, `never` (paused)
+Subscriptions are stored in `subscriptions` table with three possible **sources** (added in migration 001):
 
-### 8.3 Digest scheduling
+- **`self_signup`** — parent or employee signed up through the public form. Requires email verification (double opt-in for CAN-SPAM). Default frequency: weekly.
+- **`district_import`** — bulk-imported from district SIS or other district-owned contact list. Treated as opted-in on import (legal under CAN-SPAM for district-internal communications), but every digest still includes one-click unsubscribe and a "manage your preferences" link. Default frequency: weekly. Default audience: parents (or employees if employee email).
+- **`admin_added`** — manually added by an admin (rare, but supported for edge cases).
+
+Subscription criteria:
+- `school_ids` — JSON array of school IDs to receive flyers from (null = all)
+- `categories` — JSON array of categories (null = all)
+- `audience` — `parents` or `employees` (each subscription is for one audience; if a user is both, they get two subscriptions)
+- `digest_frequency` — `instant` (per flyer), `daily`, `weekly`, `never` (paused)
+- `delivery` — `email`, `sms`, or `both` (SMS only available if `phone` is set)
+
+### 8.3 Parent contact import flow (district-owned data)
+
+The district has the parent contact graph. We import it; we do not lease it from a vendor.
+
+The import flow (district admin only):
+
+1. District admin uploads a CSV with required columns: `email`, `first_name`, `last_name`. Optional columns: `school_id` (which school the parent's student attends), `student_grade`, `phone`.
+2. The Worker validates the CSV: email format, school_id exists in `schools` table, etc.
+3. For each valid row:
+   - Look up by email — if a `subscriptions` row already exists, skip (track as "skipped").
+   - Otherwise insert a new subscription with `source = 'district_import'`, `import_id = <new contact_imports.id>`, `verified = 1`, `active = 1`, `audience = 'parents'`, `digest_frequency = 'weekly'`, `school_ids = [<school_id>]` if provided.
+4. Track results in `contact_imports` table: total, imported, skipped, failed.
+5. The first digest these subscribers receive includes a clear "you're receiving this because the Davis School District has your email on file. [Manage preferences] [Unsubscribe]" header.
+6. **Rollback support**: if an import was a mistake, district admin can roll it back from `/flyers/admin/district/imports/<id>` — sets `active = 0` on every subscription with that `import_id`. Reversible if needed.
+
+### 8.4 SMS subscriber growth (organic only)
+
+We do NOT bulk-import phone numbers. SMS subscribers come exclusively from:
+- Self-signup on the subscribe form (parent or employee opts in by entering their phone)
+- Adding phone to an existing email subscription via the manage page
+
+This keeps us TCPA-compliant and avoids the "got a text I didn't ask for" complaint that destroys text channels.
+
+The platform tracks SMS subscriber growth as an explicit metric on the district analytics dashboard. This is a multi-month organic build, not a v1 feature gate.
+
+### 8.5 Digest scheduling
 
 A Cron Trigger runs every hour:
 - For `instant` subscribers: send any approved flyers since `last_sent_at` matching their criteria
@@ -430,7 +492,7 @@ A Cron Trigger runs every hour:
 
 Digests are bundled per recipient, not per flyer — one email with multiple flyers, never spam.
 
-### 8.4 Email template requirements
+### 8.6 Email template requirements
 
 - Plain text alternative always included
 - All images have alt text in HTML version
@@ -438,14 +500,16 @@ Digests are bundled per recipient, not per flyer — one email with multiple fly
 - 14px+ body text, 1.5 line height
 - High-contrast CTA buttons
 - Footer with: physical address (CAN-SPAM), unsubscribe link, "manage preferences" link, district contact info
+- For `district_import` subscribers: a clear opening line on their FIRST digest stating "You are receiving this because the Davis School District has your email on file."
 - Open tracking via 1x1 pixel pointing at `/flyers/api/event/track`
 - Click tracking via redirect URLs
 
-### 8.5 SMS templates
+### 8.7 SMS templates
 
 - Max 160 chars
 - Format: `[School Name]: <flyer title>. <short link>. Reply STOP to opt out.`
 - Short links via Cloudflare or a simple D1 lookup table — no third-party shorteners (data ownership)
+- Frequency caps: never more than 1 SMS per recipient per day, even if multiple flyers match. Bundle into "[School]: 3 new flyers. <link>"
 
 ---
 
@@ -588,20 +652,27 @@ All contrast pairs in this palette have been verified for WCAG AA compliance aga
 
 ### 11.3 Acceptance criteria for v1 ship
 
-- [ ] Public can browse `/flyers` and read every flyer without JS, without auth
+- [ ] Public can browse `/flyers/parents` and read every parent flyer without JS, without auth
+- [ ] Employees can sign in and access `/flyers/employees` to see employee-targeted flyers
+- [ ] A flyer with `audience = 'both'` appears in both views simultaneously
 - [ ] Submitter can sign in with at least magic link (SSO if at least one provider is configured)
 - [ ] Submitter can create a draft, save, edit, submit for review
+- [ ] Submitter selects audience at submission time (parents / employees / both) and platform respects it
 - [ ] PDF upload triggers a11y audit; failure feedback is specific and actionable
 - [ ] School admin can review and approve/reject from the queue
 - [ ] District admin can grant/revoke school admin roles
+- [ ] District admin can upload a parent contact CSV and seed subscriptions
+- [ ] District admin can roll back a contact import
 - [ ] Approved flyers are visible publicly within 30 seconds
 - [ ] Subscribe-by-email works end-to-end (verification → digest delivery)
-- [ ] Unsubscribe works in one click
+- [ ] District-imported subscribers receive their first digest with the proper "you are receiving this because…" notice
+- [ ] Unsubscribe works in one click for both self-signups and district-imports
 - [ ] All 5 critical pages pass automated a11y check
 - [ ] Manual screen reader smoke test passes on all 5 critical pages
 - [ ] Digest cron runs successfully in dev, sends real emails to a test mailbox
 - [ ] "vs Peachjar" counter is visible to district admin (even with placeholder rate)
 - [ ] At least one pilot school has been onboarded with at least 3 real flyers
+- [ ] At least one pilot department has posted at least 1 employee-only flyer (proves the unified platform end-to-end)
 - [ ] README and `docs/operating.md` are written so a new admin can be onboarded without us
 
 ---
@@ -646,7 +717,8 @@ Resist scope creep. These are explicitly NOT v1:
 - Video flyers / multimedia attachments beyond PDF + image
 - Analytics export to PDF (analytics dashboard is enough)
 - Public API for third parties
-- Migration tool from Peachjar (manual onboarding for v1)
+- Pulling old flyers out of Peachjar (no migration FROM Peachjar — only forward; existing Peachjar flyers stay there until they expire)
+- Bulk SMS import (organic opt-in only)
 
 ---
 
@@ -670,11 +742,20 @@ After that, hand back to Skippy for refinement, deck assembly, and pitch prep.
 These are tracked in GitHub issues. Code: do not block on them — proceed with reasonable defaults and we will refine.
 
 - Exact Peachjar contract terms (annual cost, renewal date, notice required) — pitch input
+- DSDads details — is it a contract with Peachjar or a separate vendor? Cost?
 - Pilot school identity — Skippy and Scott will identify within first week
-- DEF vs DSD ownership of the IP — affects open-source decisions
-- Whether DSD already has a parent contact list outside Peachjar — affects migration scope
+- Pilot department — at least one DSD department needs to volunteer to post employee flyers via the new system during the pilot
+- DEF vs DSD ownership of the IP — affects open-source decisions and licensing to other Utah districts
 - Microsoft Azure AD app registration — Skippy will register the app; Code uses the credentials
 - Final brand sign-off — Karah has approval authority
+- Format of the parent contact CSV the district will provide — Code: build the importer to accept the most common SIS export columns (`email`, `first_name`, `last_name`, `school_id`/`school_code`/`school_name`, `student_grade`, `phone`); if other columns appear, log and ignore.
+
+**Resolved decisions (do not relitigate):**
+- ✅ Single platform, parents and employees both v1
+- ✅ Lives at `daviskids.org/flyers`, not a subdomain
+- ✅ District owns the parent contact list and will provide it for import
+- ✅ SMS subscribers grow only through self-signup (no bulk import)
+- ✅ Auth: Microsoft + Google + Apple SSO + magic link fallback
 
 ---
 
