@@ -1,0 +1,123 @@
+#:schema node_modules/wrangler/config-schema.json
+name = "dsd-flyers"
+main = "src/index.ts"
+compatibility_date = "2026-04-27"
+compatibility_flags = ["nodejs_compat"]
+account_id = "77f3d6611f5ceab7651744268d434342"
+
+# Production deployment routes daviskids.org/flyers/* to this Worker.
+# The static daviskids.org Pages site continues to serve everything else.
+[[routes]]
+pattern = "daviskids.org/flyers"
+zone_id = "e9aac6e9fab72eae9eda35335bc47f40"
+
+[[routes]]
+pattern = "daviskids.org/flyers/*"
+zone_id = "e9aac6e9fab72eae9eda35335bc47f40"
+
+# ============================================================
+# PRODUCTION BINDINGS (default environment)
+# ============================================================
+
+[[d1_databases]]
+binding = "DB"
+database_name = "dsd-flyers"
+database_id = "5b5de1d1-ca4a-4e27-bad5-f0a071a75b58"
+
+[[r2_buckets]]
+binding = "ASSETS"
+bucket_name = "dsd-flyers-assets"
+
+[[kv_namespaces]]
+binding = "KV"
+id = "72249a65614a42f987b766e8ee616f68"
+
+[[vectorize]]
+binding = "VECTORIZE"
+index_name = "dsd-flyers-search"
+
+# Workers AI for embeddings (bge-base-en-v1.5)
+[ai]
+binding = "AI"
+
+# Browser Rendering for PDF accessibility scanning (axe-core injection)
+[browser]
+binding = "BROWSER"
+
+# ============================================================
+# ENVIRONMENT VARIABLES
+# ============================================================
+
+[vars]
+ENVIRONMENT = "production"
+PUBLIC_BASE_URL = "https://daviskids.org/flyers"
+ALLOWED_EMAIL_DOMAINS = "dsdmail.net,davis.k12.ut.us"
+EMPLOYEE_EMAIL_DOMAIN = "dsdmail.net"
+MAGIC_LINK_TTL_MINUTES = "15"
+SESSION_TTL_DAYS = "30"
+TARGET_READING_GRADE = "6.0"
+A11Y_PASS_THRESHOLD = "85"
+
+# Secrets (set via `wrangler secret put`):
+#   MICROSOFT_CLIENT_ID
+#   MICROSOFT_CLIENT_SECRET
+#   MICROSOFT_TENANT_ID
+#   GOOGLE_CLIENT_ID
+#   GOOGLE_CLIENT_SECRET
+#   APPLE_CLIENT_ID
+#   APPLE_TEAM_ID
+#   APPLE_KEY_ID
+#   APPLE_PRIVATE_KEY
+#   RESEND_API_KEY  (or SENDGRID_API_KEY)
+#   TWILIO_ACCOUNT_SID
+#   TWILIO_AUTH_TOKEN
+#   TWILIO_FROM_NUMBER
+#   SESSION_SECRET   (for signing session cookies)
+
+# ============================================================
+# DEV ENVIRONMENT
+# ============================================================
+
+[env.dev]
+name = "dsd-flyers-dev"
+
+[env.dev.vars]
+ENVIRONMENT = "development"
+PUBLIC_BASE_URL = "https://dsd-flyers-dev.fosterlabs.workers.dev"
+ALLOWED_EMAIL_DOMAINS = "dsdmail.net,davis.k12.ut.us,gmail.com"
+EMPLOYEE_EMAIL_DOMAIN = "dsdmail.net"
+MAGIC_LINK_TTL_MINUTES = "60"
+SESSION_TTL_DAYS = "7"
+TARGET_READING_GRADE = "6.0"
+A11Y_PASS_THRESHOLD = "70"
+
+[[env.dev.d1_databases]]
+binding = "DB"
+database_name = "dsd-flyers-dev"
+database_id = "2c95fbe9-ed47-4099-8b39-d7bbc6a873a5"
+
+[[env.dev.r2_buckets]]
+binding = "ASSETS"
+bucket_name = "dsd-flyers-assets"
+
+[[env.dev.kv_namespaces]]
+binding = "KV"
+id = "72249a65614a42f987b766e8ee616f68"
+
+[[env.dev.vectorize]]
+binding = "VECTORIZE"
+index_name = "dsd-flyers-search"
+
+[env.dev.ai]
+binding = "AI"
+
+[env.dev.browser]
+binding = "BROWSER"
+
+# ============================================================
+# OBSERVABILITY
+# ============================================================
+
+[observability]
+enabled = true
+head_sampling_rate = 1

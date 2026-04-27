@@ -1,0 +1,33 @@
+{
+  "name": "dsd-flyers",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Davis School District Flyers — ADA-compliant flyer distribution platform",
+  "scripts": {
+    "dev": "wrangler dev --env dev",
+    "deploy": "wrangler deploy",
+    "deploy:dev": "wrangler deploy --env dev",
+    "tail": "wrangler tail",
+    "tail:dev": "wrangler tail --env dev",
+    "db:migrate": "wrangler d1 execute dsd-flyers --remote --file=./schema.sql",
+    "db:migrate:dev": "wrangler d1 execute dsd-flyers-dev --remote --file=./schema.sql",
+    "db:seed": "wrangler d1 execute dsd-flyers --remote --file=./seeds/schools.sql",
+    "db:seed:dev": "wrangler d1 execute dsd-flyers-dev --remote --file=./seeds/schools.sql",
+    "type-check": "tsc --noEmit",
+    "lint": "eslint src/ --ext .ts",
+    "test": "vitest",
+    "test:a11y": "vitest run a11y"
+  },
+  "dependencies": {
+    "hono": "^4.6.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260101.0",
+    "@types/node": "^22.0.0",
+    "axe-core": "^4.10.0",
+    "eslint": "^9.0.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.0.0",
+    "wrangler": "^3.90.0"
+  }
+}
