@@ -23,9 +23,11 @@ The platform must be ADA-compliant by default — every flyer that ships through
 
 Federal Title II of the ADA (April 2024 rule) requires WCAG 2.1 AA on all public-facing digital content from public entities. Peachjar pushes image PDFs whose text is not duplicated as accessible text. Every Peachjar flyer is a potential OCR (Office for Civil Rights) complaint. The district already has a relationship with the OCR office and cannot afford continued exposure.
 
-DSDads has the same problem internally — and arguably worse, because internal-facing tools historically receive less compliance scrutiny but the legal exposure is identical.
+**DSDads is not actually a separate platform** — it's an ad-hoc workflow where employee announcements go out as plain email blasts, often with PDFs attached that have the same accessibility problems as Peachjar flyers. There is no audit trail, no accessibility check, and no record of who sent what. From a compliance standpoint, this is *worse* than Peachjar because at least Peachjar has some infrastructure. The district replacing DSDads with Flyers means they get a real system, an audit trail, and accessibility checks for the first time.
 
-**Compliance is the wedge. Cost savings and platform consolidation are the bonuses.**
+**Compliance is the wedge. Cost savings, platform consolidation, and accountability are the bonuses.**
+
+**Peachjar is cancellable at any time.** No contract end date pressure. We pitch when we are ready, walk in with a working system and pilot data, and the district can flip the switch the day they approve.
 
 ### 1.3 The contact graph (this changes the migration story)
 
@@ -741,21 +743,23 @@ After that, hand back to Skippy for refinement, deck assembly, and pitch prep.
 
 These are tracked in GitHub issues. Code: do not block on them — proceed with reasonable defaults and we will refine.
 
-- Exact Peachjar contract terms (annual cost, renewal date, notice required) — pitch input
-- DSDads details — is it a contract with Peachjar or a separate vendor? Cost?
-- Pilot school identity — Skippy and Scott will identify within first week
-- Pilot department — at least one DSD department needs to volunteer to post employee flyers via the new system during the pilot
-- DEF vs DSD ownership of the IP — affects open-source decisions and licensing to other Utah districts
+**Still open:**
+- Exact Peachjar annual cost (for the "vs Peachjar" cost-savings counter — admin can plug in a placeholder until known)
 - Microsoft Azure AD app registration — Skippy will register the app; Code uses the credentials
 - Final brand sign-off — Karah has approval authority
-- Format of the parent contact CSV the district will provide — Code: build the importer to accept the most common SIS export columns (`email`, `first_name`, `last_name`, `school_id`/`school_code`/`school_name`, `student_grade`, `phone`); if other columns appear, log and ignore.
+- FERPA review with district legal — gating the first parent contact import (see `docs/csv-import-format.md`)
 
 **Resolved decisions (do not relitigate):**
 - ✅ Single platform, parents and employees both v1
 - ✅ Lives at `daviskids.org/flyers`, not a subdomain
+- ✅ Auth: Microsoft + Google + Apple SSO + magic link fallback
 - ✅ District owns the parent contact list and will provide it for import
 - ✅ SMS subscribers grow only through self-signup (no bulk import)
-- ✅ Auth: Microsoft + Google + Apple SSO + magic link fallback
+- ✅ **Peachjar can be cancelled at any time** — no contract timing pressure on the pitch
+- ✅ **DSDads is not a vendor** — it's just internal email blasts today. We're not displacing a contract; we're displacing an ad-hoc workflow with zero compliance controls.
+- ✅ **Pilot lead: Scott** — DEF marketing access + Wicko build seat means Scott posts the pilot flyers himself. No separate principal coordination required for the v1 ship.
+- ✅ **DEF owns the IP** — this is a DEF product, not a DSD product. DSD is the first deployment; the platform is licensable to other Utah district foundations as a recurring revenue line for DEF.
+- ✅ **CSV import format**: `email` (required), `first_name`, `last_name`, `school` (name or id), `grade`, `phone` (optional). Schema migration 002 added `student_grades`, `parent_first_name`, `parent_last_name` to `subscriptions`. Full spec in `docs/csv-import-format.md`.
 
 ---
 
